@@ -5,7 +5,7 @@
 
 #include "Tracker.h"
 #include "Client.h"
-#include "utils.h"
+#include "constants.h"
 
 
 int main (int argc, char *argv[]) {
@@ -21,11 +21,13 @@ int main (int argc, char *argv[]) {
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
     if (rank == TRACKER_RANK) {
-        Tracker tracker(numtasks, rank);
-        tracker.run();
+        Tracker *tracker = new Tracker(numtasks, rank);
+        tracker->run();
+        delete tracker;
     } else {
-        Client client(numtasks, rank);
-        client.run();
+        Client *client = new Client(numtasks, rank);
+        client->run();
+        delete client;
     }
 
     MPI_Finalize();
