@@ -50,6 +50,7 @@ void Client::run() {
         exit(-1);
     }
 
+    cout << "Client with rank <" << rank << "> finished.\n";
 }
 
 
@@ -146,11 +147,14 @@ void *download_thread_func(void *arg) {
 
     for (auto &wanted_file : client->wanted_files) {
         vector<int> swarm;
+        vector<Segment> segments;
+        client->receive_file_details_from_tracker(wanted_file, swarm, segments);
 
-        client->receive_file_swarm(wanted_file, swarm);
+
 
         #ifdef DEBUG
         client->print_swarm_for_file(wanted_file, swarm);
+        client->print_segment_details_for_file(wanted_file, segments);
         #endif
     }
 
@@ -160,14 +164,21 @@ void *download_thread_func(void *arg) {
 }
 
 
-void Client::receive_file_swarm(std::string &wanted_file, std::vector<int> &swarm) {
-    // Send HELO message to the tracker, with SWARM_REQ_TAG.
+void Client::receive_file_details_from_tracker(std::string &wanted_file, std::vector<int> &swarm,
+                                               std::vector<Segment> &segments) {
+    // Send HELO message to the tracker, with FILE_REQ_TAG.
     int msg = HELO;
-    MPI_Send(&msg, 1, MPI_INT, TRACKER_RANK, SWARM_REQ_TAG, MPI_COMM_WORLD);
+    MPI_Send(&msg, 1, MPI_INT, TRACKER_RANK, FILE_REQ_TAG, MPI_COMM_WORLD);
 
-    // Ask the tracker for the swarm of wanted_file.
-    MPI_Send(wanted_file.c_str(), wanted_file.size() + 1, MPI_CHAR, TRACKER_RANK, SWARM_REQ_TAG, MPI_COMM_WORLD);
+    // Send the name of the file to the tracker.
+    MPI_Send(wanted_file.c_str(), wanted_file.size() + 1, MPI_CHAR, TRACKER_RANK, FILE_REQ_TAG, MPI_COMM_WORLD);
 
+    receive_file_swarm_from_tracker(swarm);
+    receive_file_segment_details_from_tracker(segments);
+}
+
+
+void Client::receive_file_swarm_from_tracker(std::vector<int> &swarm) {
     // Receive the size of the swarm.
     int swarm_size;
     MPI_Recv(&swarm_size, 1, MPI_INT, TRACKER_RANK, SWARM_REQ_TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
@@ -178,6 +189,28 @@ void Client::receive_file_swarm(std::string &wanted_file, std::vector<int> &swar
         MPI_Recv(&client_id, 1, MPI_INT, TRACKER_RANK, SWARM_REQ_TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
         swarm.push_back(client_id);
+    }
+}
+
+
+void Client::receive_file_segment_details_from_tracker(std::vector<Segment> &segments) {
+    // Receive the number of segments.
+    int segment_cnt;
+    MPI_Recv(&segment_cnt, 1, MPI_INT, TRACKER_RANK, SEGM_DETAILS_TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+
+    // Receive segment details.
+    for (int i = 0; i < segment_cnt; i++) {
+        // Receive segment hash (add '\0' manually).
+        char hash_buff[HASH_SIZE + 1];
+        MPI_Recv(hash_buff, HASH_SIZE, MPI_CHAR, TRACKER_RANK, SEGM_DETAILS_TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+        hash_buff[HASH_SIZE] = '\0';
+        string hash(hash_buff);
+
+        // Receive segment index.
+        int idx;
+        MPI_Recv(&idx, 1, MPI_INT, TRACKER_RANK, SEGM_DETAILS_TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+
+        segments.emplace_back(hash, idx);
     }
 }
 
@@ -228,6 +261,19 @@ void Client::print_swarm_for_file(std::string &file, std::vector<int> &swarm) {
     fout << "Swarm for filename <" << file << ">:\n";
     for (int peer : swarm) {
         fout << peer << "\n";
+    }
+
+    fout << "\n";
+}
+
+
+void Client::print_segment_details_for_file(std::string &file, std::vector<Segment> &segments) {
+    ofstream fout;
+    fout.open("client<" + to_string(rank) + ">.debug", std::fstream::app);
+
+    fout << "Segments for filename <" << file << ">:\n";
+    for (const auto &segment : segments) {
+        fout << "Segment hash: " << segment.hash << ", index: " << segment.index << "\n";
     }
 
     fout << "\n";

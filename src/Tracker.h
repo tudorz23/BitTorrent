@@ -5,8 +5,6 @@
 #include <vector>
 #include <string>
 
-#include <fstream>
-
 #include "helper_objects.h"
 
 
@@ -29,8 +27,11 @@ class Tracker {
 
     void recv_file_details_from_client(int client_idx);
 
-    void handle_file_swarm_request(int source);
+    void handle_file_details_request(int client_idx);
 
+    void send_file_swarm_to_client(std::string &file_name, int client_idx);
+
+    void send_file_segment_details_to_client(std::string &file_name, int client_idx);
 
     // For debug.
     void print_database_and_swarms();

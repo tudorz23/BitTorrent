@@ -12,7 +12,9 @@
 
 #define INIT_TAG 1
 #define READY_TAG 2
-#define SWARM_REQ_TAG 3
+#define FILE_REQ_TAG 3
+#define SWARM_REQ_TAG 4
+#define SEGM_DETAILS_TAG 5
 
 #define ACK 42
 #define HELO 10

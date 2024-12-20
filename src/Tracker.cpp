@@ -5,6 +5,7 @@
 
 
 #include <iostream>
+#include <fstream>
 
 using namespace std;
 
@@ -31,8 +32,8 @@ void Tracker::run() {
         MPI_Recv(&msg, 1, MPI_INT, MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, &status);
 
         switch(status.MPI_TAG) {
-            case SWARM_REQ_TAG:
-                handle_file_swarm_request(status.MPI_SOURCE);
+            case FILE_REQ_TAG:
+                handle_file_details_request(status.MPI_SOURCE);
                 break;
         }
     }
@@ -97,26 +98,49 @@ void Tracker::recv_file_details_from_client(int client_idx) {
 }
 
 
-void Tracker::handle_file_swarm_request(int source) {
+void Tracker::handle_file_details_request(int client_idx) {
     // Receive file name (including '\0').
     char buff[MAX_FILENAME + 1];
-    MPI_Recv(buff, MAX_FILENAME + 1, MPI_CHAR, source, SWARM_REQ_TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+    MPI_Recv(buff, MAX_FILENAME + 1, MPI_CHAR, client_idx, FILE_REQ_TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
     string file_name(buff);
 
+    send_file_swarm_to_client(file_name, client_idx);
+    send_file_segment_details_to_client(file_name, client_idx);
+
+    // Set the client as a peer for the file.
+    this->file_to_swarm[file_name].add_peer(client_idx);
+}
+
+
+void Tracker::send_file_swarm_to_client(std::string &file_name, int client_idx) {
     // Send the swarm size.
     int swarm_size = this->file_to_swarm[file_name].get_size();
-    MPI_Send(&swarm_size, 1, MPI_INT, source, SWARM_REQ_TAG, MPI_COMM_WORLD);
+    MPI_Send(&swarm_size, 1, MPI_INT, client_idx, SWARM_REQ_TAG, MPI_COMM_WORLD);
 
     // Send the swarm.
     for (int seed : this->file_to_swarm[file_name].seeds) {
-        MPI_Send(&seed, 1, MPI_INT, source, SWARM_REQ_TAG, MPI_COMM_WORLD);
+        MPI_Send(&seed, 1, MPI_INT, client_idx, SWARM_REQ_TAG, MPI_COMM_WORLD);
     }
 
     for (int peer : this->file_to_swarm[file_name].peers) {
-        MPI_Send(&peer, 1, MPI_INT, source, SWARM_REQ_TAG, MPI_COMM_WORLD);
+        MPI_Send(&peer, 1, MPI_INT, client_idx, SWARM_REQ_TAG, MPI_COMM_WORLD);
     }
 }
 
+
+void Tracker::send_file_segment_details_to_client(std::string &file_name, int client_idx) {
+    // Send the number of segments.
+    int segment_cnt = file_database[file_name].size();
+    MPI_Send(&segment_cnt, 1, MPI_INT, client_idx, SEGM_DETAILS_TAG, MPI_COMM_WORLD);
+
+    for (const auto &segment : file_database[file_name]) {
+        // Send segment hash.
+        MPI_Send(segment.hash.c_str(), HASH_SIZE, MPI_CHAR, client_idx, SEGM_DETAILS_TAG, MPI_COMM_WORLD);
+
+        // Send segment index.
+        MPI_Send(&segment.index, 1, MPI_INT, client_idx, SEGM_DETAILS_TAG, MPI_COMM_WORLD);
+    }
+}
 
 
 // DEBUG METHODS //
