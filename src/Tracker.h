@@ -29,6 +29,8 @@ class Tracker {
 
     void recv_file_details_from_client(int client_idx);
 
+    void handle_file_swarm_request(int source);
+
 
     // For debug.
     void print_database_and_swarms();

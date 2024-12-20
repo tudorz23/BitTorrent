@@ -1,11 +1,10 @@
 #include "Tracker.h"
 
 #include <mpi.h>
+#include "constants.h"
+
 
 #include <iostream>
-
-
-#include "constants.h"
 
 using namespace std;
 
@@ -22,12 +21,33 @@ void Tracker::run() {
     #endif
 
     initialize();
+
+    // Handle client requests.
+    while (true) {
+        MPI_Status status;
+        int msg;
+
+        // Receive HELO message.
+        MPI_Recv(&msg, 1, MPI_INT, MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, &status);
+
+        switch(status.MPI_TAG) {
+            case SWARM_REQ_TAG:
+                handle_file_swarm_request(status.MPI_SOURCE);
+                break;
+        }
+    }
 }
 
 
 void Tracker::initialize() {
     for (int client_idx = 1; client_idx < numtasks; client_idx++) {
         recv_file_details_from_client(client_idx);
+    }
+
+    // Send ACK to all clients.
+    for (int client_idx = 1; client_idx < numtasks; client_idx++) {
+        int msg = ACK;
+        MPI_Send(&msg, 1, MPI_INT, client_idx, READY_TAG, MPI_COMM_WORLD);
     }
 
     #ifdef DEBUG
@@ -76,6 +96,30 @@ void Tracker::recv_file_details_from_client(int client_idx) {
     }
 }
 
+
+void Tracker::handle_file_swarm_request(int source) {
+    // Receive file name (including '\0').
+    char buff[MAX_FILENAME + 1];
+    MPI_Recv(buff, MAX_FILENAME + 1, MPI_CHAR, source, SWARM_REQ_TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+    string file_name(buff);
+
+    // Send the swarm size.
+    int swarm_size = this->file_to_swarm[file_name].get_size();
+    MPI_Send(&swarm_size, 1, MPI_INT, source, SWARM_REQ_TAG, MPI_COMM_WORLD);
+
+    // Send the swarm.
+    for (int seed : this->file_to_swarm[file_name].seeds) {
+        MPI_Send(&seed, 1, MPI_INT, source, SWARM_REQ_TAG, MPI_COMM_WORLD);
+    }
+
+    for (int peer : this->file_to_swarm[file_name].peers) {
+        MPI_Send(&peer, 1, MPI_INT, source, SWARM_REQ_TAG, MPI_COMM_WORLD);
+    }
+}
+
+
+
+// DEBUG METHODS //
 
 void Tracker::print_database_and_swarms() {
     ofstream fout("tracker.debug");

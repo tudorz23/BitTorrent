@@ -63,7 +63,14 @@ void Client::initialize() {
 
     send_owned_files_to_tracker();
 
+    // Wait for ACK from the tracker.
+    int msg;
+    MPI_Recv(&msg, 1, MPI_INT, TRACKER_RANK, READY_TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
+    if (msg != ACK) {
+        cerr << "Did not receive ACK from the tracker.\n";
+        exit(-1);
+    }
 }
 
 
@@ -129,6 +136,65 @@ void Client::send_owned_files_to_tracker() {
 }
 
 
+void *download_thread_func(void *arg) {
+    Client *client = (Client*) arg;
+
+    #ifdef DEBUG
+    printf("Client with rank <%d> started download thread.\n", client->rank);
+    #endif
+
+
+    for (auto &wanted_file : client->wanted_files) {
+        vector<int> swarm;
+
+        client->receive_file_swarm(wanted_file, swarm);
+
+        #ifdef DEBUG
+        client->print_swarm_for_file(wanted_file, swarm);
+        #endif
+    }
+
+
+
+    return NULL;
+}
+
+
+void Client::receive_file_swarm(std::string &wanted_file, std::vector<int> &swarm) {
+    // Send HELO message to the tracker, with SWARM_REQ_TAG.
+    int msg = HELO;
+    MPI_Send(&msg, 1, MPI_INT, TRACKER_RANK, SWARM_REQ_TAG, MPI_COMM_WORLD);
+
+    // Ask the tracker for the swarm of wanted_file.
+    MPI_Send(wanted_file.c_str(), wanted_file.size() + 1, MPI_CHAR, TRACKER_RANK, SWARM_REQ_TAG, MPI_COMM_WORLD);
+
+    // Receive the size of the swarm.
+    int swarm_size;
+    MPI_Recv(&swarm_size, 1, MPI_INT, TRACKER_RANK, SWARM_REQ_TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+
+    // Receive the swarm.
+    for (int i = 0; i < swarm_size; i++) {
+        int client_id;
+        MPI_Recv(&client_id, 1, MPI_INT, TRACKER_RANK, SWARM_REQ_TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+
+        swarm.push_back(client_id);
+    }
+}
+
+
+void *upload_thread_func(void *arg) {
+    Client *client = (Client*) arg;
+
+    #ifdef DEBUG
+    printf("Client with rank <%d> started upload thread.\n", client->rank);
+    #endif
+
+    return NULL;
+}
+
+
+
+// DEBUG METHODS //
 
 void Client::print_files_after_read() {
     ofstream fout("client<" + to_string(rank) + ">.debug");
@@ -149,28 +215,20 @@ void Client::print_files_after_read() {
         fout << "Filename: " << file << "\n";
     }
 
+    fout << "\n";
+
     fout.close();
 }
 
 
+void Client::print_swarm_for_file(std::string &file, std::vector<int> &swarm) {
+    ofstream fout;
+    fout.open("client<" + to_string(rank) + ">.debug", std::fstream::app);
 
-void *download_thread_func(void *arg) {
-    Client *client = (Client*) arg;
+    fout << "Swarm for filename <" << file << ">:\n";
+    for (int peer : swarm) {
+        fout << peer << "\n";
+    }
 
-    #ifdef DEBUG
-    printf("Client with rank <%d> started download thread.\n", client->rank);
-    #endif
-
-    return NULL;
-}
-
-
-void *upload_thread_func(void *arg) {
-    Client *client = (Client*) arg;
-
-    #ifdef DEBUG
-    printf("Client with rank <%d> started upload thread.\n", client->rank);
-    #endif
-
-    return NULL;
+    fout << "\n";
 }

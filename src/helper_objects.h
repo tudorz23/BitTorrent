@@ -23,6 +23,8 @@ class Swarm {
     void add_peer(int peer);
 
     void remove_peer(int peer);
+
+    int get_size();
 };
 
 

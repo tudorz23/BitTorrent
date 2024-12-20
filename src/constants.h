@@ -11,7 +11,10 @@
 #define DEBUG
 
 #define INIT_TAG 1
+#define READY_TAG 2
+#define SWARM_REQ_TAG 3
 
-
+#define ACK 42
+#define HELO 10
 
 #endif /* UTILS_H */

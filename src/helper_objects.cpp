@@ -25,3 +25,8 @@ void Swarm::remove_peer(int peer) {
         this->peers.erase(pos);
     }
 }
+
+
+int Swarm::get_size() {
+    return seeds.size() + peers.size();
+}
