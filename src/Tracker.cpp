@@ -35,6 +35,10 @@ void Tracker::run() {
             case FILE_REQ_TAG:
                 handle_file_details_request(status.MPI_SOURCE);
                 break;
+
+            case UPDATE_TAG:
+                handle_update_swarm_request(status.MPI_SOURCE);
+                break;
         }
     }
 }
@@ -140,6 +144,16 @@ void Tracker::send_file_segment_details_to_client(std::string &file_name, int cl
         // Send segment index.
         MPI_Send(&segment.index, 1, MPI_INT, client_idx, SEGM_DETAILS_TAG, MPI_COMM_WORLD);
     }
+}
+
+
+void Tracker::handle_update_swarm_request(int client_idx) {
+    // Receive file name (including '\0').
+    char buff[MAX_FILENAME + 1];
+    MPI_Recv(buff, MAX_FILENAME + 1, MPI_CHAR, client_idx, UPDATE_TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+    string file_name(buff);
+
+    send_file_swarm_to_client(file_name, client_idx);
 }
 
 

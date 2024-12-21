@@ -1,5 +1,5 @@
-#ifndef HELPER_STRUCTS_H
-#define HELPER_STRUCTS_H
+#ifndef HELPER_OBJECTS_H
+#define HELPER_OBJECTS_H
 
 #include <string>
 #include <vector>
@@ -28,4 +28,4 @@ class Swarm {
 };
 
 
-#endif
+#endif /* HELPER_OBJECTS_H */

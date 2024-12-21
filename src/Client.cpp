@@ -1,13 +1,11 @@
 #include "Client.h"
 
 #include <mpi.h>
-#include <pthread.h>
 #include <fstream>
-
-#include <iostream>
-
+#include <limits.h>
 #include "constants.h"
 
+#include <iostream>
 
 using namespace std;
 
@@ -15,6 +13,14 @@ using namespace std;
 Client::Client(int numtasks, int rank) {
     this->numtasks = numtasks;
     this->rank = rank;
+    this->load = 0;
+
+    pthread_mutex_init(&owned_files_mutex, NULL);
+}
+
+
+Client::~Client() {
+    pthread_mutex_destroy(&owned_files_mutex);
 }
 
 
@@ -150,15 +156,44 @@ void *download_thread_func(void *arg) {
         vector<Segment> segments;
         client->receive_file_details_from_tracker(wanted_file, swarm, segments);
 
-
-
         #ifdef DEBUG
         client->print_swarm_for_file(wanted_file, swarm);
         client->print_segment_details_for_file(wanted_file, segments);
         #endif
+
+        int counter = 0;
+
+        // Ask peers for segments.
+        for (auto segment : segments) {
+            counter++;
+            if (counter == 10) {
+                counter = 0;
+                client->update_swarm_from_tracker(wanted_file, swarm);
+            }
+
+            // Get the peer from the swarm that owns the segment and has minimum load.
+            int peer = client->get_peer_with_min_load_for_segment(wanted_file, segment.index, swarm);
+
+            // Send HELO message to that peer, with SEGM_REQ_TAG.
+            int msg = HELO;
+            MPI_Send(&msg, 1, MPI_INT, peer, SEGM_REQ_TAG, MPI_COMM_WORLD);
+
+            // Send file name (including '\0').
+            MPI_Send(wanted_file.c_str(), wanted_file.size() + 1, MPI_CHAR, peer, SEGM_REQ_TAG, MPI_COMM_WORLD);
+
+            // Send segment index.
+            MPI_Send(&segment.index, 1, MPI_INT, peer, SEGM_REQ_TAG, MPI_COMM_WORLD);
+
+            // Receive response (simulate the receival of the file).
+            int response;
+            MPI_Recv(&response, 1, MPI_INT, peer, SEGM_REQ_TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+
+            // Add the "newly received" segment to the owned list.
+            pthread_mutex_lock(&client->owned_files_mutex);
+            client->owned_files[wanted_file].emplace_back(segment.hash, segment.index);
+            pthread_mutex_unlock(&client->owned_files_mutex);
+        }
     }
-
-
 
     return NULL;
 }
@@ -193,6 +228,20 @@ void Client::receive_file_swarm_from_tracker(std::vector<int> &swarm) {
 }
 
 
+void Client::update_swarm_from_tracker(std::string &wanted_file, std::vector<int> &swarm) {
+    swarm.clear();
+
+    // Send HELO message to the tracker, with UPDATE_TAG.
+    int msg = HELO;
+    MPI_Send(&msg, 1, MPI_INT, TRACKER_RANK, UPDATE_TAG, MPI_COMM_WORLD);
+
+    // Send the name of the file to the tracker.
+    MPI_Send(wanted_file.c_str(), wanted_file.size() + 1, MPI_CHAR, TRACKER_RANK, UPDATE_TAG, MPI_COMM_WORLD);
+
+    receive_file_swarm_from_tracker(swarm);
+}
+
+
 void Client::receive_file_segment_details_from_tracker(std::vector<Segment> &segments) {
     // Receive the number of segments.
     int segment_cnt;
@@ -212,6 +261,46 @@ void Client::receive_file_segment_details_from_tracker(std::vector<Segment> &seg
 
         segments.emplace_back(hash, idx);
     }
+}
+
+
+int Client::get_peer_with_min_load_for_segment(std::string &file, int segment_idx,
+                                               std::vector<int> &swarm) {
+    int min_load = INT_MAX;
+    int peer_with_min_load = -1;
+
+    for (int peer : swarm) {
+        // Send HELO message to peer, with HAS_SEGM_TAG.
+        int msg = HELO;
+        MPI_Send(&msg, 1, MPI_INT, peer, HAS_SEGM_TAG, MPI_COMM_WORLD);
+
+        // Send file name (including '\0').
+        MPI_Send(file.c_str(), file.size() + 1, MPI_CHAR, peer, HAS_SEGM_TAG, MPI_COMM_WORLD);
+
+        // Send segment index.
+        MPI_Send(&segment_idx, 1, MPI_INT, peer, HAS_SEGM_TAG, MPI_COMM_WORLD);
+
+        // Receive response.
+        int response;
+        MPI_Recv(&response, 1, MPI_INT, peer, HAS_SEGM_TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+
+        if (response == NACK) {
+            // Peer does not own this segment.
+            continue;
+        }
+
+        // If response is not NACK, then it represents the load of the peer.
+        if (response == 0) {
+            return peer;
+        }
+
+        if (response < min_load) {
+            min_load = response;
+            peer_with_min_load = peer;
+        }
+    }
+
+    return peer_with_min_load;
 }
 
 

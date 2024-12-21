@@ -4,6 +4,7 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
+#include <pthread.h>
 
 #include "helper_objects.h"
 
@@ -12,12 +13,16 @@ class Client {
  public:
     int numtasks;
     int rank;
+    int load;
+    pthread_mutex_t owned_files_mutex;
 
     std::unordered_map<std::string, std::vector<Segment>> owned_files;
     std::vector<std::string> wanted_files;
 
 
     Client(int numtasks, int rank);
+
+    ~Client();
 
     void run();
 
@@ -32,7 +37,12 @@ class Client {
 
     void receive_file_swarm_from_tracker(std::vector<int> &swarm);
 
+    void update_swarm_from_tracker(std::string &wanted_file, std::vector<int> &swarm);
+
     void receive_file_segment_details_from_tracker(std::vector<Segment> &segments);
+
+    int get_peer_with_min_load_for_segment(std::string &file, int segment_idx,
+                                           std::vector<int> &swarm);
 
     // For debug.
     void print_files_after_read();

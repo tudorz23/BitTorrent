@@ -33,6 +33,8 @@ class Tracker {
 
     void send_file_segment_details_to_client(std::string &file_name, int client_idx);
 
+    void handle_update_swarm_request(int client_idx);
+
     // For debug.
     void print_database_and_swarms();
 };

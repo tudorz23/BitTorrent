@@ -1,5 +1,5 @@
-#ifndef UTILS_H
-#define UTILS_H
+#ifndef CONSTANTS_H
+#define CONSTANTS_H
 
 #define TRACKER_RANK 0
 #define MAX_FILES 10
@@ -15,8 +15,12 @@
 #define FILE_REQ_TAG 3
 #define SWARM_REQ_TAG 4
 #define SEGM_DETAILS_TAG 5
+#define HAS_SEGM_TAG 6
+#define UPDATE_TAG 7
+#define SEGM_REQ_TAG 8
 
-#define ACK 42
 #define HELO 10
+#define ACK 42
+#define NACK -1
 
-#endif /* UTILS_H */
+#endif /* CONSTANTS_H */
