@@ -176,6 +176,11 @@ void *download_thread_func(void *arg) {
             // Get the peer from the swarm that owns the segment and has minimum load.
             int peer = client->get_peer_with_min_load_for_segment(wanted_file, segment.index, swarm);
 
+            #ifdef DEBUG
+            if (client->rank == 4)
+            cout << "Client <" << client->rank << "> chose for segment " << segment.index << ", peer " << peer << ", from a swarm of size " << swarm.size() << endl;
+            #endif
+
             // Send "Hello" message to that peer, initialising a GET_SEGMENT communication.
             int msg = GET_SEGMENT_REQ;
             MPI_Send(&msg, 1, MPI_INT, peer, UPLOAD_TAG, MPI_COMM_WORLD);
@@ -278,6 +283,11 @@ int Client::get_peer_with_min_load_for_segment(std::string &file, int segment_id
     int peer_with_min_load = -1;
 
     for (int peer : swarm) {
+        // Do not consider self as a valid peer to ask for the segment.
+        if (peer == this->rank) {
+            continue;
+        }
+
         // Send "Hello" message to peer, initialising a HAS_SEGMENT communication.
         int msg = HAS_SEGMENT_REQ;
         MPI_Send(&msg, 1, MPI_INT, peer, UPLOAD_TAG, MPI_COMM_WORLD);
@@ -307,6 +317,11 @@ int Client::get_peer_with_min_load_for_segment(std::string &file, int segment_id
             peer_with_min_load = peer;
         }
     }
+
+    #ifdef DEBUG
+    if (rank == 4)
+    cout << "Client <" << rank << "> chose peer " << peer_with_min_load << ", with a load of " << min_load << endl;
+    #endif
 
     return peer_with_min_load;
 }
@@ -392,6 +407,13 @@ void Client::handle_get_segment_req_from_peer(int peer_idx) {
     // Receive segment index.
     int segment_idx;
     MPI_Recv(&segment_idx, 1, MPI_INT, peer_idx, UPLOAD_TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+
+    // Add load to the client.
+    this->load++;
+
+    #ifdef DEBUG
+    // cout << "Seed <" << rank << "> has a load of " << load << endl;
+    #endif
 
     // Send response to the peer (simulate the sending of the segment).
     int response = ACK;

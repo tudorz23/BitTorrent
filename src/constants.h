@@ -27,7 +27,7 @@
 #define UPLOAD_TAG 4
 
 #define ACK 42
-#define NACK 43
+#define NACK -42
 
 #define FILE_DETAILS_REQ 10
 #define UPDATE_SWARM_REQ 11
