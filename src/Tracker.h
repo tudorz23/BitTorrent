@@ -35,6 +35,10 @@ class Tracker {
 
     void handle_update_swarm_request(int client_idx);
 
+    void handle_file_download_complete_from_client(int client_idx);
+
+    void announce_all_clients_to_stop();
+
     // For debug.
     void print_database_and_swarms();
 };

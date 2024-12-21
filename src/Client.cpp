@@ -56,7 +56,9 @@ void Client::run() {
         exit(-1);
     }
 
+    #ifdef DEBUG
     cout << "Client with rank <" << rank << "> finished.\n";
+    #endif
 }
 
 
@@ -72,7 +74,7 @@ void Client::initialize() {
 
     // Wait for ACK from the tracker.
     int msg;
-    MPI_Recv(&msg, 1, MPI_INT, TRACKER_RANK, READY_TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+    MPI_Recv(&msg, 1, MPI_INT, TRACKER_RANK, INIT_TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
     if (msg != ACK) {
         cerr << "Did not receive ACK from the tracker.\n";
@@ -174,26 +176,32 @@ void *download_thread_func(void *arg) {
             // Get the peer from the swarm that owns the segment and has minimum load.
             int peer = client->get_peer_with_min_load_for_segment(wanted_file, segment.index, swarm);
 
-            // Send HELO message to that peer, with SEGM_REQ_TAG.
-            int msg = HELO;
-            MPI_Send(&msg, 1, MPI_INT, peer, SEGM_REQ_TAG, MPI_COMM_WORLD);
+            // Send "Hello" message to that peer, initialising a GET_SEGMENT communication.
+            int msg = GET_SEGMENT_REQ;
+            MPI_Send(&msg, 1, MPI_INT, peer, UPLOAD_TAG, MPI_COMM_WORLD);
 
             // Send file name (including '\0').
-            MPI_Send(wanted_file.c_str(), wanted_file.size() + 1, MPI_CHAR, peer, SEGM_REQ_TAG, MPI_COMM_WORLD);
+            MPI_Send(wanted_file.c_str(), wanted_file.size() + 1, MPI_CHAR, peer, UPLOAD_TAG, MPI_COMM_WORLD);
 
             // Send segment index.
-            MPI_Send(&segment.index, 1, MPI_INT, peer, SEGM_REQ_TAG, MPI_COMM_WORLD);
+            MPI_Send(&segment.index, 1, MPI_INT, peer, UPLOAD_TAG, MPI_COMM_WORLD);
 
-            // Receive response (simulate the receival of the file).
+            // Receive response (simulate the receival of the segment).
             int response;
-            MPI_Recv(&response, 1, MPI_INT, peer, SEGM_REQ_TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+            MPI_Recv(&response, 1, MPI_INT, peer, DOWNLOAD_TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
             // Add the "newly received" segment to the owned list.
             pthread_mutex_lock(&client->owned_files_mutex);
             client->owned_files[wanted_file].emplace_back(segment.hash, segment.index);
             pthread_mutex_unlock(&client->owned_files_mutex);
         }
+
+        client->announce_tracker_whole_file_received(wanted_file);
+
+        client->save_file(wanted_file);
     }
+
+    client->announce_tracker_all_files_received();
 
     return NULL;
 }
@@ -201,12 +209,12 @@ void *download_thread_func(void *arg) {
 
 void Client::receive_file_details_from_tracker(std::string &wanted_file, std::vector<int> &swarm,
                                                std::vector<Segment> &segments) {
-    // Send HELO message to the tracker, with FILE_REQ_TAG.
-    int msg = HELO;
-    MPI_Send(&msg, 1, MPI_INT, TRACKER_RANK, FILE_REQ_TAG, MPI_COMM_WORLD);
+    // Send "Hello" message to the tracker, initialising a FILE_DETAILS communication.
+    int msg = FILE_DETAILS_REQ;
+    MPI_Send(&msg, 1, MPI_INT, TRACKER_RANK, TRACKER_TAG, MPI_COMM_WORLD);
 
     // Send the name of the file to the tracker.
-    MPI_Send(wanted_file.c_str(), wanted_file.size() + 1, MPI_CHAR, TRACKER_RANK, FILE_REQ_TAG, MPI_COMM_WORLD);
+    MPI_Send(wanted_file.c_str(), wanted_file.size() + 1, MPI_CHAR, TRACKER_RANK, TRACKER_TAG, MPI_COMM_WORLD);
 
     receive_file_swarm_from_tracker(swarm);
     receive_file_segment_details_from_tracker(segments);
@@ -216,14 +224,36 @@ void Client::receive_file_details_from_tracker(std::string &wanted_file, std::ve
 void Client::receive_file_swarm_from_tracker(std::vector<int> &swarm) {
     // Receive the size of the swarm.
     int swarm_size;
-    MPI_Recv(&swarm_size, 1, MPI_INT, TRACKER_RANK, SWARM_REQ_TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+    MPI_Recv(&swarm_size, 1, MPI_INT, TRACKER_RANK, DOWNLOAD_TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
     // Receive the swarm.
     for (int i = 0; i < swarm_size; i++) {
         int client_id;
-        MPI_Recv(&client_id, 1, MPI_INT, TRACKER_RANK, SWARM_REQ_TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+        MPI_Recv(&client_id, 1, MPI_INT, TRACKER_RANK, DOWNLOAD_TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
         swarm.push_back(client_id);
+    }
+}
+
+
+void Client::receive_file_segment_details_from_tracker(std::vector<Segment> &segments) {
+    // Receive the number of segments.
+    int segment_cnt;
+    MPI_Recv(&segment_cnt, 1, MPI_INT, TRACKER_RANK, DOWNLOAD_TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+
+    // Receive segment details.
+    for (int i = 0; i < segment_cnt; i++) {
+        // Receive segment hash (add '\0' manually).
+        char hash_buff[HASH_SIZE + 1];
+        MPI_Recv(hash_buff, HASH_SIZE, MPI_CHAR, TRACKER_RANK, DOWNLOAD_TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+        hash_buff[HASH_SIZE] = '\0';
+        string hash(hash_buff);
+
+        // Receive segment index.
+        int idx;
+        MPI_Recv(&idx, 1, MPI_INT, TRACKER_RANK, DOWNLOAD_TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+
+        segments.emplace_back(hash, idx);
     }
 }
 
@@ -231,36 +261,14 @@ void Client::receive_file_swarm_from_tracker(std::vector<int> &swarm) {
 void Client::update_swarm_from_tracker(std::string &wanted_file, std::vector<int> &swarm) {
     swarm.clear();
 
-    // Send HELO message to the tracker, with UPDATE_TAG.
-    int msg = HELO;
-    MPI_Send(&msg, 1, MPI_INT, TRACKER_RANK, UPDATE_TAG, MPI_COMM_WORLD);
+    // Send "Hello" message to the tracker, initialising an UPDATE_SWARM communication.
+    int msg = UPDATE_SWARM_REQ;
+    MPI_Send(&msg, 1, MPI_INT, TRACKER_RANK, TRACKER_TAG, MPI_COMM_WORLD);
 
     // Send the name of the file to the tracker.
-    MPI_Send(wanted_file.c_str(), wanted_file.size() + 1, MPI_CHAR, TRACKER_RANK, UPDATE_TAG, MPI_COMM_WORLD);
+    MPI_Send(wanted_file.c_str(), wanted_file.size() + 1, MPI_CHAR, TRACKER_RANK, TRACKER_TAG, MPI_COMM_WORLD);
 
     receive_file_swarm_from_tracker(swarm);
-}
-
-
-void Client::receive_file_segment_details_from_tracker(std::vector<Segment> &segments) {
-    // Receive the number of segments.
-    int segment_cnt;
-    MPI_Recv(&segment_cnt, 1, MPI_INT, TRACKER_RANK, SEGM_DETAILS_TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-
-    // Receive segment details.
-    for (int i = 0; i < segment_cnt; i++) {
-        // Receive segment hash (add '\0' manually).
-        char hash_buff[HASH_SIZE + 1];
-        MPI_Recv(hash_buff, HASH_SIZE, MPI_CHAR, TRACKER_RANK, SEGM_DETAILS_TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-        hash_buff[HASH_SIZE] = '\0';
-        string hash(hash_buff);
-
-        // Receive segment index.
-        int idx;
-        MPI_Recv(&idx, 1, MPI_INT, TRACKER_RANK, SEGM_DETAILS_TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-
-        segments.emplace_back(hash, idx);
-    }
 }
 
 
@@ -270,19 +278,19 @@ int Client::get_peer_with_min_load_for_segment(std::string &file, int segment_id
     int peer_with_min_load = -1;
 
     for (int peer : swarm) {
-        // Send HELO message to peer, with HAS_SEGM_TAG.
-        int msg = HELO;
-        MPI_Send(&msg, 1, MPI_INT, peer, HAS_SEGM_TAG, MPI_COMM_WORLD);
+        // Send "Hello" message to peer, initialising a HAS_SEGMENT communication.
+        int msg = HAS_SEGMENT_REQ;
+        MPI_Send(&msg, 1, MPI_INT, peer, UPLOAD_TAG, MPI_COMM_WORLD);
 
         // Send file name (including '\0').
-        MPI_Send(file.c_str(), file.size() + 1, MPI_CHAR, peer, HAS_SEGM_TAG, MPI_COMM_WORLD);
+        MPI_Send(file.c_str(), file.size() + 1, MPI_CHAR, peer, UPLOAD_TAG, MPI_COMM_WORLD);
 
         // Send segment index.
-        MPI_Send(&segment_idx, 1, MPI_INT, peer, HAS_SEGM_TAG, MPI_COMM_WORLD);
+        MPI_Send(&segment_idx, 1, MPI_INT, peer, UPLOAD_TAG, MPI_COMM_WORLD);
 
         // Receive response.
         int response;
-        MPI_Recv(&response, 1, MPI_INT, peer, HAS_SEGM_TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+        MPI_Recv(&response, 1, MPI_INT, peer, DOWNLOAD_TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
         if (response == NACK) {
             // Peer does not own this segment.
@@ -311,9 +319,119 @@ void *upload_thread_func(void *arg) {
     printf("Client with rank <%d> started upload thread.\n", client->rank);
     #endif
 
+    bool should_stop = false;
+
+    while (true) {
+        MPI_Status status;
+        int msg;
+
+        // Receive "Hello" message.
+        MPI_Recv(&msg, 1, MPI_INT, MPI_ANY_SOURCE, UPLOAD_TAG, MPI_COMM_WORLD, &status);
+
+        switch (msg) {
+            case HAS_SEGMENT_REQ:
+                client->handle_has_segment_req_from_peer(status.MPI_SOURCE);
+                break;
+
+            case GET_SEGMENT_REQ:
+                client->handle_get_segment_req_from_peer(status.MPI_SOURCE);
+                break;
+
+            case STOP:
+                should_stop = true;
+                break;
+        }
+
+        if (should_stop) {
+            break;
+        }
+    }
+
+
     return NULL;
 }
 
+
+void Client::handle_has_segment_req_from_peer(int peer_idx) {
+    // Receive file name (including '\0').
+    char buff[MAX_FILENAME + 1];
+    MPI_Recv(buff, MAX_FILENAME + 1, MPI_CHAR, peer_idx, UPLOAD_TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+    string file_name(buff);
+
+    // Receive segment index.
+    int segment_idx;
+    MPI_Recv(&segment_idx, 1, MPI_INT, peer_idx, UPLOAD_TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+
+    // Check if that segment is owned by the client.
+    pthread_mutex_lock(&this->owned_files_mutex);
+    for (const auto &segment : owned_files[file_name]) {
+        if (segment.index == segment_idx) {
+            // Send ACK message back to the peer, by sending the load of the client.
+            int response = this->load;
+            MPI_Send(&response, 1, MPI_INT, peer_idx, DOWNLOAD_TAG, MPI_COMM_WORLD);
+
+            pthread_mutex_unlock(&this->owned_files_mutex);
+            return;
+        }
+    }
+
+    pthread_mutex_unlock(&this->owned_files_mutex);
+
+    // Send NACK message back to the peer.
+    int response = NACK;
+    MPI_Send(&response, 1, MPI_INT, peer_idx, DOWNLOAD_TAG, MPI_COMM_WORLD);
+}
+
+
+void Client::handle_get_segment_req_from_peer(int peer_idx) {
+    // Receive file name (including '\0').
+    char buff[MAX_FILENAME + 1];
+    MPI_Recv(buff, MAX_FILENAME + 1, MPI_CHAR, peer_idx, UPLOAD_TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+    string file_name(buff);
+
+    // Receive segment index.
+    int segment_idx;
+    MPI_Recv(&segment_idx, 1, MPI_INT, peer_idx, UPLOAD_TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+
+    // Send response to the peer (simulate the sending of the segment).
+    int response = ACK;
+    MPI_Send(&response, 1, MPI_INT, peer_idx, DOWNLOAD_TAG, MPI_COMM_WORLD);
+}
+
+
+void Client::announce_tracker_whole_file_received(std::string &file) {
+    // Send "Hello" message to the tracker, initialising a FILE_DOWNLOAD_COMPLETE communication.
+    int msg = FILE_DOWNLOAD_COMPLETE;
+    MPI_Send(&msg, 1, MPI_INT, TRACKER_RANK, TRACKER_TAG, MPI_COMM_WORLD);
+
+    // Send the name of the file to the tracker.
+    MPI_Send(file.c_str(), file.size() + 1, MPI_CHAR, TRACKER_RANK, TRACKER_TAG, MPI_COMM_WORLD);
+}
+
+
+void Client::save_file(std::string &file) {
+    ofstream out_file("client" + to_string(this->rank) + "_" + file);
+
+    vector<Segment>::iterator it = this->owned_files[file].begin();
+
+    while (it != this->owned_files[file].end()) {
+        out_file << it->hash;
+
+        it++;
+        if (it != this->owned_files[file].end()) {
+            out_file << "\n";
+        }
+    }
+
+    out_file.close();
+}
+
+
+void Client::announce_tracker_all_files_received() {
+    // Send "Hello" message to the tracker, initialising an ALL_FILES_RECEIVED communication.
+    int msg = ALL_FILES_RECEIVED;
+    MPI_Send(&msg, 1, MPI_INT, TRACKER_RANK, TRACKER_TAG, MPI_COMM_WORLD);
+}
 
 
 // DEBUG METHODS //

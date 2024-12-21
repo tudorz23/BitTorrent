@@ -37,12 +37,22 @@ class Client {
 
     void receive_file_swarm_from_tracker(std::vector<int> &swarm);
 
-    void update_swarm_from_tracker(std::string &wanted_file, std::vector<int> &swarm);
-
     void receive_file_segment_details_from_tracker(std::vector<Segment> &segments);
+
+    void update_swarm_from_tracker(std::string &wanted_file, std::vector<int> &swarm);
 
     int get_peer_with_min_load_for_segment(std::string &file, int segment_idx,
                                            std::vector<int> &swarm);
+
+    void handle_has_segment_req_from_peer(int peer_idx);
+
+    void handle_get_segment_req_from_peer(int peer_idx);
+
+    void announce_tracker_whole_file_received(std::string &file);
+
+    void save_file(std::string &file);
+
+    void announce_tracker_all_files_received();
 
     // For debug.
     void print_files_after_read();

@@ -8,19 +8,34 @@
 #define MAX_CHUNKS 100
 
 
-#define DEBUG
+// #define DEBUG
+
+/*
+ * Rule: For an MPI message, the tag is:
+ *      -INIT_TAG -> for messages from the initialization stage
+ *      -TRACKER_TAG -> for messages that have the tracker as destination
+ *      -DOWNLOAD_TAG -> for messages that have a download thread of a client as destination
+ *      -UPLOAD_TAG -> for messages that have an upload thread of a client as destination
+ * 
+ * Thus, there will be no risk of miscommunication if two threads execute
+ * a Recv at the same time.
+ */
 
 #define INIT_TAG 1
-#define READY_TAG 2
-#define FILE_REQ_TAG 3
-#define SWARM_REQ_TAG 4
-#define SEGM_DETAILS_TAG 5
-#define HAS_SEGM_TAG 6
-#define UPDATE_TAG 7
-#define SEGM_REQ_TAG 8
+#define TRACKER_TAG 2
+#define DOWNLOAD_TAG 3
+#define UPLOAD_TAG 4
 
-#define HELO 10
 #define ACK 42
-#define NACK -1
+#define NACK 43
+
+#define FILE_DETAILS_REQ 10
+#define UPDATE_SWARM_REQ 11
+#define HAS_SEGMENT_REQ 12
+#define GET_SEGMENT_REQ 13
+#define FILE_DOWNLOAD_COMPLETE 14
+#define ALL_FILES_RECEIVED 15
+#define STOP 16
+
 
 #endif /* CONSTANTS_H */
