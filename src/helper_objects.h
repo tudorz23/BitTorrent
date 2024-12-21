@@ -24,6 +24,8 @@ class Swarm {
 
     void remove_peer(int peer);
 
+    void mark_peer_as_seed(int peer);
+
     int get_size();
 };
 

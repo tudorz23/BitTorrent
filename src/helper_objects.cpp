@@ -27,6 +27,12 @@ void Swarm::remove_peer(int peer) {
 }
 
 
+void Swarm::mark_peer_as_seed(int peer) {
+    this->add_seed(peer);
+    this->remove_peer(peer);
+}
+
+
 int Swarm::get_size() {
     return seeds.size() + peers.size();
 }
