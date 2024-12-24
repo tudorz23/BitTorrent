@@ -20,9 +20,9 @@ class Tracker {
  public:
     Tracker(int numtasks, int rank);
 
-
     void run();
 
+ private:
     void initialize();
 
     void recv_file_details_from_client(int client_idx);
@@ -42,8 +42,6 @@ class Tracker {
     // For debug.
     void print_database_and_swarms();
 };
-
-
 
 
 #endif /* TRACKER_H */

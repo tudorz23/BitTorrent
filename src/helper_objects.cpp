@@ -1,6 +1,6 @@
 #include "helper_objects.h"
-
 #include <algorithm>
+
 
 Segment::Segment(std::string hash, int index) {
     this->hash = hash;
@@ -34,5 +34,5 @@ void Swarm::mark_peer_as_seed(int peer) {
 
 
 int Swarm::get_size() {
-    return seeds.size() + peers.size();
+    return this->seeds.size() + this->peers.size();
 }

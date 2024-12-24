@@ -91,7 +91,7 @@ void Tracker::recv_file_details_from_client(int client_idx) {
         MPI_Recv(buff, MAX_FILENAME + 1, MPI_CHAR, client_idx, INIT_TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
         string file_name(buff);
 
-        // If the file is already in the database, don't store its segments again.
+        // If the file is already in the database, don't store its segment details again.
         bool already_stored = this->file_database.find(file_name) != this->file_database.end();
 
         // Save the client as a seed for this file.

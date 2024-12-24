@@ -163,13 +163,13 @@ void *download_thread_func(void *arg) {
         client->print_segment_details_for_file(wanted_file, segments);
         #endif
 
-        int counter = 0;
+        int segment_counter = 0;
 
         // Ask peers for segments.
         for (auto segment : segments) {
-            counter++;
-            if (counter == 10) {
-                counter = 0;
+            segment_counter++;
+            if (segment_counter == 10) {
+                segment_counter = 0;
                 client->update_swarm_from_tracker(wanted_file, swarm);
             }
 
@@ -195,6 +195,11 @@ void *download_thread_func(void *arg) {
             int response;
             MPI_Recv(&response, 1, MPI_INT, peer, DOWNLOAD_TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
+            if (response != ACK) {
+                cerr << "Critical: segment was not correctly received.\n";
+                exit(-1);
+            }
+
             // Add the "newly received" segment to the owned list.
             pthread_mutex_lock(&client->owned_files_mutex);
             client->owned_files[wanted_file].emplace_back(segment.hash, segment.index);
@@ -218,7 +223,7 @@ void Client::receive_file_details_from_tracker(std::string &wanted_file, std::ve
     int msg = FILE_DETAILS_REQ;
     MPI_Send(&msg, 1, MPI_INT, TRACKER_RANK, TRACKER_TAG, MPI_COMM_WORLD);
 
-    // Send the name of the file to the tracker.
+    // Send the name of the file to the tracker (including '\0').
     MPI_Send(wanted_file.c_str(), wanted_file.size() + 1, MPI_CHAR, TRACKER_RANK, TRACKER_TAG, MPI_COMM_WORLD);
 
     receive_file_swarm_from_tracker(swarm);
@@ -270,7 +275,7 @@ void Client::update_swarm_from_tracker(std::string &wanted_file, std::vector<int
     int msg = UPDATE_SWARM_REQ;
     MPI_Send(&msg, 1, MPI_INT, TRACKER_RANK, TRACKER_TAG, MPI_COMM_WORLD);
 
-    // Send the name of the file to the tracker.
+    // Send the name of the file to the tracker (including '\0').
     MPI_Send(wanted_file.c_str(), wanted_file.size() + 1, MPI_CHAR, TRACKER_RANK, TRACKER_TAG, MPI_COMM_WORLD);
 
     receive_file_swarm_from_tracker(swarm);
@@ -426,7 +431,7 @@ void Client::announce_tracker_whole_file_received(std::string &file) {
     int msg = FILE_DOWNLOAD_COMPLETE;
     MPI_Send(&msg, 1, MPI_INT, TRACKER_RANK, TRACKER_TAG, MPI_COMM_WORLD);
 
-    // Send the name of the file to the tracker.
+    // Send the name of the file to the tracker (including '\0').
     MPI_Send(file.c_str(), file.size() + 1, MPI_CHAR, TRACKER_RANK, TRACKER_TAG, MPI_COMM_WORLD);
 }
 

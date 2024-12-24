@@ -23,4 +23,7 @@ tema2: main.o client.o tracker.o helper_objects.o
 clean:
 	rm -rf *.o $(TARGETS)
 
+pack:
+	zip -FSr 333CA_ZahariaMarius-Tudor_Tema2.zip Makefile *.cpp *.h README.md
+
 .PHONY: build clean pack

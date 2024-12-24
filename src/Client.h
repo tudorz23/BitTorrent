@@ -65,7 +65,6 @@ class Client {
 
 void *download_thread_func(void *arg);
 
-
 void *upload_thread_func(void *arg);
 
 
