@@ -135,7 +135,7 @@ void Tracker::handle_file_details_request(int client_idx) {
 }
 
 
-void Tracker::send_file_swarm_to_client(std::string &file_name, int client_idx) {
+void Tracker::send_file_swarm_to_client(const std::string &file_name, int client_idx) {
     // Send the swarm size.
     int swarm_size = this->file_to_swarm[file_name].get_size();
     MPI_Send(&swarm_size, 1, MPI_INT, client_idx, DOWNLOAD_TAG, MPI_COMM_WORLD);
@@ -151,7 +151,7 @@ void Tracker::send_file_swarm_to_client(std::string &file_name, int client_idx) 
 }
 
 
-void Tracker::send_file_segment_details_to_client(std::string &file_name, int client_idx) {
+void Tracker::send_file_segment_details_to_client(const std::string &file_name, int client_idx) {
     // Send the number of segments.
     int segment_cnt = file_database[file_name].size();
     MPI_Send(&segment_cnt, 1, MPI_INT, client_idx, DOWNLOAD_TAG, MPI_COMM_WORLD);

@@ -29,9 +29,9 @@ class Tracker {
 
     void handle_file_details_request(int client_idx);
 
-    void send_file_swarm_to_client(std::string &file_name, int client_idx);
+    void send_file_swarm_to_client(const std::string &file_name, int client_idx);
 
-    void send_file_segment_details_to_client(std::string &file_name, int client_idx);
+    void send_file_segment_details_to_client(const std::string &file_name, int client_idx);
 
     void handle_update_swarm_request(int client_idx);
 

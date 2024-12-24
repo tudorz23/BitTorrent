@@ -114,7 +114,7 @@ void Client::read_input_file() {
         string file_name;
         input_file >> file_name;
 
-        this->wanted_files.push_back(file_name);
+        this->wanted_files.insert(file_name);
     }
 
     input_file.close();
@@ -153,7 +153,7 @@ void *download_thread_func(void *arg) {
     #endif
 
 
-    for (auto &wanted_file : client->wanted_files) {
+    for (const auto &wanted_file : client->wanted_files) {
         vector<int> swarm;
         vector<Segment> segments;
         client->receive_file_details_from_tracker(wanted_file, swarm, segments);
@@ -217,7 +217,7 @@ void *download_thread_func(void *arg) {
 }
 
 
-void Client::receive_file_details_from_tracker(std::string &wanted_file, std::vector<int> &swarm,
+void Client::receive_file_details_from_tracker(const std::string &wanted_file, std::vector<int> &swarm,
                                                std::vector<Segment> &segments) {
     // Send "Hello" message to the tracker, initialising a FILE_DETAILS communication.
     int msg = FILE_DETAILS_REQ;
@@ -268,7 +268,7 @@ void Client::receive_file_segment_details_from_tracker(std::vector<Segment> &seg
 }
 
 
-void Client::update_swarm_from_tracker(std::string &wanted_file, std::vector<int> &swarm) {
+void Client::update_swarm_from_tracker(const std::string &wanted_file, std::vector<int> &swarm) {
     swarm.clear();
 
     // Send "Hello" message to the tracker, initialising an UPDATE_SWARM communication.
@@ -282,7 +282,7 @@ void Client::update_swarm_from_tracker(std::string &wanted_file, std::vector<int
 }
 
 
-int Client::get_peer_with_min_load_for_segment(std::string &file, int segment_idx,
+int Client::get_peer_with_min_load_for_segment(const std::string &file, int segment_idx,
                                                std::vector<int> &swarm) {
     int min_load = INT_MAX;
     int peer_with_min_load = -1;
@@ -382,20 +382,31 @@ void Client::handle_has_segment_req_from_peer(int peer_idx) {
     int segment_idx;
     MPI_Recv(&segment_idx, 1, MPI_INT, peer_idx, UPLOAD_TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
+    // Lock if the file is a wanted file of the client
+    // (i.e. might be modified concurrently by the download thread).
+    bool should_lock = this->wanted_files.find(file_name) != this->wanted_files.end();
+
+    if (should_lock) {
+        pthread_mutex_lock(&this->owned_files_mutex);
+    }
+
     // Check if that segment is owned by the client.
-    pthread_mutex_lock(&this->owned_files_mutex);
     for (const auto &segment : owned_files[file_name]) {
         if (segment.index == segment_idx) {
             // Send ACK message back to the peer, by sending the load of the client.
             int response = this->load;
             MPI_Send(&response, 1, MPI_INT, peer_idx, DOWNLOAD_TAG, MPI_COMM_WORLD);
 
-            pthread_mutex_unlock(&this->owned_files_mutex);
+            if (should_lock) {
+                pthread_mutex_unlock(&this->owned_files_mutex);
+            }
             return;
         }
     }
 
-    pthread_mutex_unlock(&this->owned_files_mutex);
+    if (should_lock) {
+        pthread_mutex_unlock(&this->owned_files_mutex);
+    }
 
     // Send NACK message back to the peer.
     int response = NACK;
@@ -426,7 +437,7 @@ void Client::handle_get_segment_req_from_peer(int peer_idx) {
 }
 
 
-void Client::announce_tracker_whole_file_received(std::string &file) {
+void Client::announce_tracker_whole_file_received(const std::string &file) {
     // Send "Hello" message to the tracker, initialising a FILE_DOWNLOAD_COMPLETE communication.
     int msg = FILE_DOWNLOAD_COMPLETE;
     MPI_Send(&msg, 1, MPI_INT, TRACKER_RANK, TRACKER_TAG, MPI_COMM_WORLD);
@@ -436,7 +447,7 @@ void Client::announce_tracker_whole_file_received(std::string &file) {
 }
 
 
-void Client::save_file(std::string &file) {
+void Client::save_file(const std::string &file) {
     ofstream out_file("client" + to_string(this->rank) + "_" + file);
 
     vector<Segment>::iterator it = this->owned_files[file].begin();
@@ -488,7 +499,7 @@ void Client::print_files_after_read() {
 }
 
 
-void Client::print_swarm_for_file(std::string &file, std::vector<int> &swarm) {
+void Client::print_swarm_for_file(const std::string &file, std::vector<int> &swarm) {
     ofstream fout;
     fout.open("client<" + to_string(rank) + ">.debug", std::fstream::app);
 
@@ -501,7 +512,7 @@ void Client::print_swarm_for_file(std::string &file, std::vector<int> &swarm) {
 }
 
 
-void Client::print_segment_details_for_file(std::string &file, std::vector<Segment> &segments) {
+void Client::print_segment_details_for_file(const std::string &file, std::vector<Segment> &segments) {
     ofstream fout;
     fout.open("client<" + to_string(rank) + ">.debug", std::fstream::app);
 
