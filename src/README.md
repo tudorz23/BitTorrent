@@ -72,7 +72,7 @@ own that segment. From these, the one with the minimum `load` (i.e. segments
 sent up to that moment in time) is chosen, and the segment is received from it
 (i.e. an `ACK` message).
 * The client then adds the new segment to the `owned files` map, so it can now
-send it to other clients tha ask for it.
+send it to other clients that ask for it too.
 * After all the segments of a file are downloaded, a message to the tracker is
 sent, notifying that is has now become a `seed` of that file. The hashes of
 that file are written in order to an output file.
@@ -87,7 +87,7 @@ iterates the owned segments of that file. If the querried segment is found, a
 non-negative message representing the current `load` of the client is sent as
 response. Else, a `NACK` response is sent.
 * When it receives a querry asking for a certain segment (i.e. after confirming
-the posession of that segment), sends an `ACK`.
+the posession of that segment), sends an `ACK` and increments the `load`.
 
 ### Implementation details
 * A `mutex` is used for the `owned_files` map, because it is shared between both
@@ -104,11 +104,11 @@ completely downloaded.
 
 ## Tracker
 * It first receives, from the clients, the files from the network and the details
-of their segments. Then, sends an `ACK` to each client to start te algorithm.
+of their segments. Then, sends an `ACK` to each client to start the algorithm.
 * Holds a map linking each `file` to its `swarm`, but at no time does it know
 which client owns which segment.
-* Holds a map linking each `file` to its vector of `segments`, but at no time
-does it know the actual content of a file.
+* Holds a map linking each `file` to its vector of `Segments` (i.e. hash and
+index), but at no time does it know the actual content of a file.
 * When receiving a querry asking for the details of a file, it sends the `swarm`
 and the `segments` details of that file.
 * When receiving a message that a client fully downloaded a file, marks it as a
