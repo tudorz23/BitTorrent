@@ -3,9 +3,8 @@
 #include <mpi.h>
 #include <fstream>
 #include <limits.h>
-#include "constants.h"
-
 #include <iostream>
+#include "constants.h"
 
 using namespace std;
 
@@ -55,20 +54,11 @@ void Client::run() {
         printf("Eroare la asteptarea thread-ului de upload\n");
         exit(-1);
     }
-
-    #ifdef DEBUG
-    cout << "Client with rank <" << rank << "> finished.\n";
-    #endif
 }
 
 
 void Client::initialize() {
     read_input_file();
-
-    #ifdef DEBUG
-    print_files_after_read();
-    printf("Client with rank <%d> initialized.\n", rank);
-    #endif
 
     send_owned_files_to_tracker();
 
@@ -148,20 +138,10 @@ void Client::send_owned_files_to_tracker() {
 void *download_thread_func(void *arg) {
     Client *client = (Client*) arg;
 
-    #ifdef DEBUG
-    printf("Client with rank <%d> started download thread.\n", client->rank);
-    #endif
-
-
     for (const auto &wanted_file : client->wanted_files) {
         vector<int> swarm;
         vector<Segment> segments;
         client->receive_file_details_from_tracker(wanted_file, swarm, segments);
-
-        #ifdef DEBUG
-        client->print_swarm_for_file(wanted_file, swarm);
-        client->print_segment_details_for_file(wanted_file, segments);
-        #endif
 
         int segment_counter = 0;
 
@@ -175,11 +155,6 @@ void *download_thread_func(void *arg) {
 
             // Get the peer from the swarm that owns the segment and has minimum load.
             int peer = client->get_peer_with_min_load_for_segment(wanted_file, segment.index, swarm);
-
-            #ifdef DEBUG
-            if (client->rank == 4)
-            cout << "Client <" << client->rank << "> chose for segment " << segment.index << ", peer " << peer << ", from a swarm of size " << swarm.size() << endl;
-            #endif
 
             // Send "Hello" message to that peer, initialising a GET_SEGMENT communication.
             int msg = GET_SEGMENT_REQ;
@@ -323,21 +298,12 @@ int Client::get_peer_with_min_load_for_segment(const std::string &file, int segm
         }
     }
 
-    #ifdef DEBUG
-    if (rank == 4)
-    cout << "Client <" << rank << "> chose peer " << peer_with_min_load << ", with a load of " << min_load << endl;
-    #endif
-
     return peer_with_min_load;
 }
 
 
 void *upload_thread_func(void *arg) {
     Client *client = (Client*) arg;
-
-    #ifdef DEBUG
-    printf("Client with rank <%d> started upload thread.\n", client->rank);
-    #endif
 
     bool should_stop = false;
 
@@ -366,7 +332,6 @@ void *upload_thread_func(void *arg) {
             break;
         }
     }
-
 
     return NULL;
 }
@@ -427,10 +392,6 @@ void Client::handle_get_segment_req_from_peer(int peer_idx) {
     // Add load to the client.
     this->load++;
 
-    #ifdef DEBUG
-    // cout << "Seed <" << rank << "> has a load of " << load << endl;
-    #endif
-
     // Send response to the peer (simulate the sending of the segment).
     int response = ACK;
     MPI_Send(&response, 1, MPI_INT, peer_idx, DOWNLOAD_TAG, MPI_COMM_WORLD);
@@ -469,57 +430,4 @@ void Client::announce_tracker_all_files_received() {
     // Send "Hello" message to the tracker, initialising an ALL_FILES_RECEIVED communication.
     int msg = ALL_FILES_RECEIVED;
     MPI_Send(&msg, 1, MPI_INT, TRACKER_RANK, TRACKER_TAG, MPI_COMM_WORLD);
-}
-
-
-// DEBUG METHODS //
-
-void Client::print_files_after_read() {
-    ofstream fout("client<" + to_string(rank) + ">.debug");
-
-    fout << "Owned files cnt: " << owned_files.size() << "\n";
-    for (const auto &[file, segments] : owned_files) {
-        fout << "FileName: " << file << "\n";
-        for (const auto &segment : segments) {
-            fout << "Segment hash: " << segment.hash << ", segment idx: " << segment.index << "\n";
-        }
-        fout << "\n";
-    }
-
-    fout << "\n";
-
-    fout << "Wanted files cnt: " << wanted_files.size() << "\n";
-    for (const auto &file : wanted_files) {
-        fout << "Filename: " << file << "\n";
-    }
-
-    fout << "\n";
-
-    fout.close();
-}
-
-
-void Client::print_swarm_for_file(const std::string &file, std::vector<int> &swarm) {
-    ofstream fout;
-    fout.open("client<" + to_string(rank) + ">.debug", std::fstream::app);
-
-    fout << "Swarm for filename <" << file << ">:\n";
-    for (int peer : swarm) {
-        fout << peer << "\n";
-    }
-
-    fout << "\n";
-}
-
-
-void Client::print_segment_details_for_file(const std::string &file, std::vector<Segment> &segments) {
-    ofstream fout;
-    fout.open("client<" + to_string(rank) + ">.debug", std::fstream::app);
-
-    fout << "Segments for filename <" << file << ">:\n";
-    for (const auto &segment : segments) {
-        fout << "Segment hash: " << segment.hash << ", index: " << segment.index << "\n";
-    }
-
-    fout << "\n";
 }

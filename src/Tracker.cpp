@@ -3,10 +3,6 @@
 #include <mpi.h>
 #include "constants.h"
 
-
-#include <iostream>
-#include <fstream>
-
 using namespace std;
 
 
@@ -17,10 +13,6 @@ Tracker::Tracker(int numtasks, int rank) {
 
 
 void Tracker::run() {
-    #ifdef DEBUG
-    printf("Tracker is running\n");
-    #endif
-
     initialize();
 
     int finished_clients = 0;
@@ -73,10 +65,6 @@ void Tracker::initialize() {
         int msg = ACK;
         MPI_Send(&msg, 1, MPI_INT, client_idx, INIT_TAG, MPI_COMM_WORLD);
     }
-
-    #ifdef DEBUG
-    print_database_and_swarms();
-    #endif
 }
 
 
@@ -192,32 +180,4 @@ void Tracker::announce_all_clients_to_stop() {
         int msg = STOP;
         MPI_Send(&msg, 1, MPI_INT, client_idx, UPLOAD_TAG, MPI_COMM_WORLD);
     }
-}
-
-// DEBUG METHODS //
-
-void Tracker::print_database_and_swarms() {
-    ofstream fout("tracker.debug");
-
-    for (const auto &[file, segments] : file_database) {
-        fout << "Filename: " << file << "\n";
-
-        for (const auto &segment : segments) {
-            fout << "Segment hash: " << segment.hash << ", index: " << segment.index << "\n";
-        }
-
-        fout << "\n";
-    }
-
-    for (const auto &[file, swarm] : file_to_swarm) {
-        fout << "Seeds for filename<" << file << ">:\n";
-
-        for (const auto &seed : swarm.seeds) {
-            fout << seed << "\n";
-        }
-
-        fout << "\n";
-    }
-
-    fout.close();
 }

@@ -7,9 +7,6 @@
 #define HASH_SIZE 32
 #define MAX_CHUNKS 100
 
-
-// #define DEBUG
-
 /*
  * Rule: For an MPI message, the tag is:
  *      -INIT_TAG -> for messages from the initialization stage

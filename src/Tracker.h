@@ -4,7 +4,6 @@
 #include <unordered_map>
 #include <vector>
 #include <string>
-
 #include "helper_objects.h"
 
 
@@ -38,9 +37,6 @@ class Tracker {
     void handle_file_download_complete_from_client(int client_idx);
 
     void announce_all_clients_to_stop();
-
-    // For debug.
-    void print_database_and_swarms();
 };
 
 
