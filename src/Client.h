@@ -6,7 +6,6 @@
 #include <vector>
 #include <unordered_set>
 #include <pthread.h>
-
 #include "helper_objects.h"
 
 
@@ -54,13 +53,6 @@ class Client {
     void save_file(const std::string &file);
 
     void announce_tracker_all_files_received();
-
-    // For debug.
-    void print_files_after_read();
-
-    void print_swarm_for_file(const std::string &file, std::vector<int> &swarm);
-
-    void print_segment_details_for_file(const std::string &file, std::vector<Segment> &segments);
 };
 
 
